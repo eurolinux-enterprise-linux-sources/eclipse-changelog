@@ -28,6 +28,7 @@ import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IStorage;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IAdaptable;
+import org.eclipse.core.runtime.IConfigurationElement;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
@@ -41,6 +42,7 @@ import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.linuxtools.changelog.core.ChangeLogWriter;
 import org.eclipse.linuxtools.changelog.core.ChangelogPlugin;
+import org.eclipse.linuxtools.changelog.core.IFormatterChangeLogContrib;
 import org.eclipse.linuxtools.changelog.core.IParserChangeLogContrib;
 import org.eclipse.linuxtools.changelog.core.LineComparator;
 import org.eclipse.linuxtools.changelog.core.Messages;
@@ -418,34 +420,52 @@ public class PrepareChangeLogAction extends ChangeLogAction {
 			return;
 		}
 
-		// get formatter
-		clw.setFormatter(extensionManager.getFormatterContributor(
-				entryFileName, pref_Formatter));
-
+		// Check if formatter is internal or inline..if inline, use the
+		// current active editor part, otherwise, we must find the external
+		// ChangeLog file.
 		IEditorPart changelog = null;
+	
+		// Before accessing the getFormatterConfigElement, the getFormatContibutor
+		// method must be called to initialize.
+		extensionManager.getFormatterContributor(clw.getEntryFilePath(), 
+				pref_Formatter);
+		IConfigurationElement formatterConfigElement = extensionManager
+        .getFormatterConfigElement();
+		
+		if (formatterConfigElement.getAttribute("inFile").toLowerCase().equals( //$NON-NLS-1$
+		    "true")) { //$NON-NLS-1$
+			try {
+				changelog = openEditor((IFile)pf.getResource());
+				clw.setFormatter(extensionManager.getFormatterContributor(
+						clw.getEntryFilePath(), pref_Formatter));
+			} catch (Exception e) {
+				// do nothing changelog will be null
+			}
+		} else {
+			// external changelog
+			// get formatter
+			clw.setFormatter(extensionManager.getFormatterContributor(
+					entryFileName, pref_Formatter));
 
-		if (pf.isRemovedFile())
-			changelog = getChangelogForRemovePath(entryPath);
-		else
-			changelog = getChangelog(entryFileName);
+			if (pf.isRemovedFile())
+				changelog = getChangelogForRemovePath(entryPath);
+			else
+				changelog = getChangelog(entryFileName);
 
-		// FIXME: this doesn't seem very useful or probable
-		if (changelog == null)
-			changelog = askChangeLogLocation(entryFileName);
-
-		if (changelog == null) {
-			ChangelogPlugin.getDefault().getLog().log(
-					new Status(IStatus.ERROR, ChangelogPlugin.PLUGIN_ID, IStatus.ERROR, // $NON-NLS-1$
-							Messages.getString("ChangeLog.ErrNoChangeLog"), null)); // $NON-NLS-1$
-			return;
+			// If there isn't a ChangeLog, we will not create one here.
+			// This prevents the situation whereby a project has an inline
+			// ChangeLog formatter and some other files have been modified
+			// as well (e.g. an rpm project).  In that case, we don't want
+			// to create a separate ChangeLog for the end-user.
+			if (changelog == null)
+				return;
 		}
-
 		// select changelog
 		clw.setChangelog(changelog);
-
+		
 		// write to changelog
-
-		clw.setDateLine(clw.getFormatter().formatDateLine(pref_AuthorName,
+		IFormatterChangeLogContrib formatter = clw.getFormatter();
+		clw.setDateLine(formatter.formatDateLine(pref_AuthorName,
 				pref_AuthorEmail));
 
 		clw.setChangelogLocation(getDocumentLocation(clw.getChangelog(), true));
@@ -529,28 +549,30 @@ public class PrepareChangeLogAction extends ChangeLogAction {
 			// for all the ranges
 			for (PatchRangeElement tpre: patchFileInfo.getRanges()) {
 
-					for (int j = tpre.ffromLine; j <= tpre.ftoLine; j++) {
+				for (int j = tpre.ffromLine; j <= tpre.ftoLine; j++) {
 
+					String functionGuess = "";
+					// add func that determines type of file.
+					// right now it assumes it's java file.
+					if (tpre.isLocalChange()) {
 						if ((j < 0) || (j > doc.getNumberOfLines() - 1))
 							continue; // ignore out of bound lines
-
-						String functionGuess = "";
-						// add func that determines type of file.
-						// right now it assumes it's java file.
-						if (tpre.isLocalChange())
-							functionGuess = parseCurrentFunctionAtOffset(
-									editorName, fei, doc.getLineOffset(j));
-						else
-							functionGuess = parseCurrentFunctionAtOffset(
-									editorName, sei, olddoc.getLineOffset(j));
-
-						// putting it in hashmap will eliminate duplicate
-						// guesses.  We use a list to keep track of ordering which
-						// is helpful when trying to document a large set of changes.
-						if (functionNamesMap.get(functionGuess) == null)
-							nameList.add(functionGuess);
-						functionNamesMap.put(functionGuess, functionGuess);
+						functionGuess = parseCurrentFunctionAtOffset(
+								editorName, fei, doc.getLineOffset(j));
+					} else {
+						if ((j < 0) || (j > olddoc.getNumberOfLines() - 1))
+							continue; // ignore out of bound lines
+						functionGuess = parseCurrentFunctionAtOffset(
+								editorName, sei, olddoc.getLineOffset(j));
 					}
+
+					// putting it in hashmap will eliminate duplicate
+					// guesses.  We use a list to keep track of ordering which
+					// is helpful when trying to document a large set of changes.
+					if (functionNamesMap.get(functionGuess) == null)
+						nameList.add(functionGuess);
+					functionNamesMap.put(functionGuess, functionGuess);
+				}
 			}
 
 			// dump all unique func. guesses in the order found

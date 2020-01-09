@@ -1,12 +1,12 @@
-%define qualifier      201003171651
-%define tag	       R0_5_0
+%define qualifier      201101131545
+%define tag	       PRE_R0_7
 %define eclipse_base    %{_libdir}/eclipse
 
 Epoch: 1
 
 Name:           eclipse-changelog
-Version:        2.6.7
-Release:        5%{?dist}
+Version:        2.7.0
+Release:        1%{?dist}
 Summary:        Eclipse ChangeLog plug-in
 
 Group:          Development/Tools
@@ -26,7 +26,7 @@ Source1:		fetch-changelog.sh
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:          eclipse-pde >= 1:3.3.0
-BuildRequires:          eclipse-cdt >= 1:4.0.0
+BuildRequires:          eclipse-cdt >= 1:7.0.1
 BuildRequires:          java-devel >= 1.4.2
 
 # These plugins are really noarch but they need cdt which
@@ -34,7 +34,7 @@ BuildRequires:          java-devel >= 1.4.2
 ExclusiveArch: %{ix86} x86_64
 %define debug_package %{nil}
 
-Requires:               eclipse-platform >= 1:3.3.0
+Requires:               eclipse-platform >= 1:3.5.2
 
 %description
 The Eclipse ChangeLog package contains Eclipse features and plugins that are
@@ -69,6 +69,11 @@ rm -rf $RPM_BUILD_ROOT
 %{eclipse_base}/dropins/changelog
 
 %changelog
+* Thu Jan 13 2011 Jeff Johnston <jjohnstn@redhat.com> 1:2.7.0-1
+- Resolves: #669499
+- Update to 2.7.0.
+- Update requires.
+
 * Fri Jun 11 2010 Jeff Johnston <jjohnstn@redhat.com> 1:2.6.7-5
 - Resolves: #596910
 - Change tarball name to include actual R0_5_0 tag used to fetch 0.5 release.
